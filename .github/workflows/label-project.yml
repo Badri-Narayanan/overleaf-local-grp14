@@ -33,7 +33,6 @@ jobs:
       - name: Update version in groupAssignments.tex
         run: |
           sed -i "s/\\\\newcommand{\\\\gitversion}{Unknown}/\\\\newcommand{\\\\gitversion}{${GIT_HASH}}/" groupAssignments.tex
-	  echo "Updated veersion to: ${GIT_HASH}"
 
       - name: Compile LaTeX document
         run: |
