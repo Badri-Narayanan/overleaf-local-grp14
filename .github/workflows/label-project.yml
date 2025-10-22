@@ -1,6 +1,5 @@
 name: Build LaTeX PDF
 
-# Give this workflow permission to write repository contents
 permissions:
   contents: write
 
@@ -18,14 +17,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # ensure the checkout action sets up credentials for pushing
           persist-credentials: true
           fetch-depth: 0
 
-      - name: Install TeX Live
+      - name: Install TeX Live and Pygments
         run: |
           sudo apt-get update
-          sudo apt-get install -y texlive-full
+          sudo apt-get install -y texlive-full python3-pygments
 
       - name: Get Git commit hash
         run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
@@ -33,13 +31,15 @@ jobs:
       - name: Update version in groupAssignments.tex
         run: |
           sed -i "s/\\\\newcommand{\\\\gitversion}{Unknown}/\\\\newcommand{\\\\gitversion}{${GIT_HASH}}/" groupAssignments.tex
+          echo "Updated version to: ${GIT_HASH}"
 
       - name: Compile LaTeX document
         run: |
-          pdflatex -interaction=nonstopmode groupAssignments.tex
+          pdflatex -shell-escape -interaction=nonstopmode groupAssignments.tex
           bibtex groupAssignments || true
-          pdflatex -interaction=nonstopmode groupAssignments.tex
-          pdflatex -interaction=nonstopmode groupAssignments.tex
+          makeindex groupAssignments.idx || true
+          pdflatex -shell-escape -interaction=nonstopmode groupAssignments.tex
+          pdflatex -shell-escape -interaction=nonstopmode groupAssignments.tex
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
@@ -55,8 +55,7 @@ jobs:
           git config user.name "Badri-Narayanan"
           git config user.email "badhrirajen@gmail.com"
           mkdir -p builds
-          mv -f groupAssignments.pdf builds/document_${GIT_HASH}.pdf
+          cp groupAssignments.pdf builds/document_${GIT_HASH}.pdf
           git add builds/document_${GIT_HASH}.pdf
           git commit -m "Auto-build PDF for commit ${GIT_HASH}" || echo "No changes to commit"
           git push origin HEAD:main || echo "Push failed"
-
