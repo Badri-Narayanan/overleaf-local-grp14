@@ -1,0 +1,344 @@
+% Chapter 3 - Assignment 3
+\chapter{AWS Deployment}
+\label{chap:aws}
+
+\section{Overview}
+This chapter documents the deployment of the two-button color website to AWS\index{AWS} using Docker and Amazon Elastic Container Registry (ECR)\index{ECR}. The deployment follows the steps outlined in Chapter 3 of the AWS guide.
+
+\section{Set Environment Variables}
+Edit these to match your setup (region, repo name, etc.):
+
+\begin{minted}{bash}
+# >>> EDIT THESE <
+export AWS_REGION=us-east-1
+export ECR_REPO=myapp
+export IMAGE_TAG=v1
+export CONTAINER_PORT=3000 # Port your app listens on
+
+# Discover your AWS Account ID from your SSO session:
+export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text --profile default)"
+\end{minted}
+
+\section{Create (or Reuse) an ECR Repository}
+Idempotently create the repo in your chosen region:
+
+\begin{minted}{bash}
+aws ecr describe-repositories \
+  --repository-names "$ECR_REPO" \
+  --region "$AWS_REGION" --profile default >/dev/null 2>&1 || \
+aws ecr create-repository \
+  --repository-name "$ECR_REPO" \
+  --image-scanning-configuration scanOnPush=true \
+  --region "$AWS_REGION" --profile default
+\end{minted}
+
+\section{Authenticate Docker to ECR}
+Use the AWS CLI to obtain a short-lived registry token and log in Docker:
+
+\begin{minted}{bash}
+aws ecr get-login-password --region "$AWS_REGION" --profile default \
+  | docker login --username AWS --password-stdin \
+  "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+\end{minted}
+
+\section{Build, Tag, and Push Your Local Image}
+Run these from the directory containing your Dockerfile:
+
+\begin{minted}{bash}
+# Build your local image
+docker build --platform linux/amd64 -t "$ECR_REPO:$IMAGE_TAG" .
+
+# Tag it for ECR
+docker tag "$ECR_REPO:$IMAGE_TAG" \
+  "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG"
+
+# Push to ECR
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG"
+\end{minted}
+
+\section{Verify the Image in ECR}
+\begin{minted}{bash}
+aws ecr describe-images \
+  --repository-name "$ECR_REPO" \
+  --region "$AWS_REGION" --profile default \
+  --query 'imageDetails[].imageTags'
+\end{minted}
+
+\section{Quick Deploy with App Runner}
+Spin up a managed HTTPS service directly from your ECR image:
+
+\begin{minted}{bash}
+export APP_NAME=my-apprunner-app
+
+aws apprunner create-service \
+  --service-name "$APP_NAME" \
+  --region "$AWS_REGION" --profile default \
+  --source-configuration "{
+    \"ImageRepository\": {
+      \"ImageIdentifier\": \"$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG\",
+      \"ImageRepositoryType\": \"ECR\",
+      \"ImageConfiguration\": {\"Port\": \"$CONTAINER_PORT\"}
+    },
+    \"AutoDeploymentsEnabled\": true
+  }" \
+  --instance-configuration "{\"Cpu\":\"1 vCPU\",\"Memory\":\"2 GB\"}"
+\end{minted}
+
+Set the following variables for your own configuration:
+
+\begin{minted}{bash}
+AWS_REGION=us-east-2
+PROFILE=AdministratorAccess-539272219501
+SERVICE_ARN=arn:aws:apprunner:us-east-2:539272219501:service/my-apprunner-app/04c50b98cd0744369e395b654752a33c
+\end{minted}
+
+Test that the service status changes to running:
+
+\begin{minted}{bash}
+while true; do
+  STATUS=$(aws apprunner describe-service \
+    --service-arn "$SERVICE_ARN" \
+    --region "$AWS_REGION" --profile "$PROFILE" \
+    --query 'Service.Status' --output text)
+  echo "Service status: $STATUS"
+  case "$STATUS" in RUNNING|CREATE_FAILED|OPERATION_FAILED) break ;; esac
+  sleep 4
+done
+\end{minted}
+
+When status changes to running, get the service URL:
+
+\begin{minted}{bash}
+aws apprunner list-services \
+  --region "$AWS_REGION" --profile default \
+  --query "ServiceSummaryList[?ServiceName=='$APP_NAME'].ServiceUrl" --output text
+\end{minted}
+
+\section{Deployment Results}
+The application was successfully deployed to AWS App Runner. Screenshots of the deployed website are shown below.
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-1.jpeg}
+  \caption{AWS Image 1}
+  \label{fig:aws-1}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-2.jpeg}
+  \caption{AWS Image 2}
+  \label{fig:aws-2}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-3.jpeg}
+  \caption{AWS Image 3}
+  \label{fig:aws-3}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-4.jpeg}
+  \caption{AWS Image 4}
+  \label{fig:aws-4}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-5.jpeg}
+  \caption{AWS Image 5}
+  \label{fig:aws-5}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{png/aws-screenshot-6.jpeg}
+  \caption{AWS Image 6}
+  \label{fig:aws-6}
+\end{minipage}
+\end{figure}
+
+\section{Class-Based JavaScript Implementation}
+The website was updated to use a class-based approach for better code organization.
+
+\subsection{Updated HTML}
+\begin{minted}{html}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Color Buttons App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+      transition: background-color 0.3s ease;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 18px;
+      margin: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Click a Button to Change Background</h1>
+  <button id="blueBtn">Blue</button>
+  <button id="redBtn">Red</button>
+  <script src="ColorChanger.js"></script>
+  <script>
+    const colorChanger = new ColorChanger();
+    colorChanger.initialize();
+  </script>
+</body>
+</html>
+\end{minted}
+
+\subsection{ColorChanger Class}
+\begin{minted}{javascript}
+class ColorChanger {
+  constructor() {
+    this.body = document.body;
+  }
+
+  changeColor(color) {
+    this.body.style.backgroundColor = color;
+  }
+
+  attachEventListeners() {
+    document.getElementById("blueBtn").addEventListener("click", () => {
+      this.changeColor("blue");
+    });
+    
+    document.getElementById("redBtn").addEventListener("click", () => {
+      this.changeColor("red");
+    });
+  }
+
+  initialize() {
+    this.attachEventListeners();
+  }
+}
+\end{minted}
+
+\subsection{UML Class Diagram}
+\begin{verbatim}
++-------------------+
+|   ColorChanger    |
++-------------------+
+| - body: Element   |
++-------------------+
+| + constructor()   |
+| + changeColor(    |
+|     color: string)|
+| + attachEvent     |
+|     Listeners()   |
+| + initialize()    |
++-------------------+
+\end{verbatim}
+
+\section{Latex Docker}
+This chapter demonstrates creating a Docker container to compile \LaTeX{} documents\index{LaTeX} using TeX Live, replicating the functionality of Overleaf locally.
+
+\section{Project Structure}
+\begin{verbatim}
+latex-docker/
+  Dockerfile
+  sample.tex
+  compile.sh
+\end{verbatim}
+
+\section{Sample LaTeX Document}
+Create a simple \LaTeX{} document to test compilation:
+
+\begin{minted}{latex}
+% sample.tex
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Docker LaTeX Test}
+\author{Group 14}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+This document was compiled using Docker and TeX Live.
+
+\section{Conclusion}
+LaTeX compilation in Docker works successfully.
+
+\end{document}
+\end{minted}
+
+\section{Dockerfile}
+Create the Dockerfile for the TeX Live environment:
+
+\begin{minted}{dockerfile}
+FROM texlive/texlive:latest
+
+WORKDIR /workspace
+
+# Copy compilation script
+COPY compile.sh /usr/local/bin/compile.sh
+RUN chmod +x /usr/local/bin/compile.sh
+
+# Set default command
+CMD ["/bin/bash"]
+\end{minted}
+
+\section{Compilation Script}
+Create a helper script to compile \LaTeX{} files:
+
+\begin{minted}{bash}
+#!/bin/bash
+# compile.sh
+
+if [ -z "$1" ]; then
+  echo "Usage: compile.sh <filename.tex>"
+  exit 1
+fi
+
+pdflatex -interaction=nonstopmode "$1"
+echo "Compilation complete: ${1%.tex}.pdf"
+\end{minted}
+
+\section{Build the Docker Image}
+Build the Docker image with TeX Live:
+
+\begin{minted}{bash}
+docker build -t latex-compiler .
+\end{minted}
+
+\section{Compile a LaTeX Document}
+Run the container to compile a \LaTeX{} file:
+
+\begin{minted}{bash}
+docker run --rm -v $(pwd):/workspace latex-compiler \
+  compile.sh sample.tex
+\end{minted}
+
+\section{Alternative: Interactive Mode}
+For interactive compilation and debugging:
+
+\begin{minted}{bash}
+docker run -it --rm -v $(pwd):/workspace latex-compiler
+# Inside container:
+pdflatex sample.tex
+\end{minted}
+
+\section{Results}
+The Docker container successfully compiles \LaTeX{} documents, producing PDF output files. This provides a portable, consistent \LaTeX{} environment without requiring local TeX Live installation.

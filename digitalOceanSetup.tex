@@ -1,0 +1,259 @@
+\chapter{DigitalOcean Setup}
+\label{chap:digitalocean}
+
+\section{Bugzilla Details}
+
+For this assignment, I deployed Bugzilla\index{Bugzilla} on a DigitalOcean\index{DigitalOcean} Droplet using Docker containers. The setup required two separate containers: one for the MariaDB\index{MariaDB} database and one for the Bugzilla application itself.
+
+\subsection{Docker Images Used}
+\begin{itemize}
+    \item \textbf{Bugzilla:} \texttt{nasqueron/bugzilla}
+    \item \textbf{Database:} \texttt{mariadb:10.6}
+\end{itemize}
+
+\subsection{Setup Process}
+
+\subsubsection{Step 1: Create DigitalOcean Droplet}
+I created a new Droplet on DigitalOcean with the following specifications:
+\begin{itemize}
+    \item Operating System: Ubuntu 22.04 LTS
+    \item Plan: Basic (\$4--\$6/month)
+    \item SSH access enabled
+\end{itemize}
+
+\subsubsection{Step 2: Install Docker}
+After connecting to the Droplet via SSH, I installed Docker and Docker Compose:
+\begin{verbatim}
+apt update && apt install -y docker.io docker-compose
+systemctl enable docker && systemctl start docker
+\end{verbatim}
+
+\subsubsection{Step 3: Create Docker Network}
+I created a dedicated Docker network to allow the containers to communicate:
+\begin{verbatim}
+docker network create bugzilla-net
+\end{verbatim}
+
+\subsubsection{Step 4: Deploy MariaDB Container}
+I started the MariaDB database container with the following configuration:
+\begin{verbatim}
+docker run -d \
+  --name mariadb-bugzilla \
+  --network bugzilla-net \
+  -e MYSQL_ROOT_PASSWORD=rootpass \
+  -e MYSQL_USER=bugzilla \
+  -e MYSQL_PASSWORD=bugpass \
+  -e MYSQL_DATABASE=bugs \
+  mariadb:10.6
+\end{verbatim}
+
+\subsubsection{Step 5: Deploy Bugzilla Container}
+After the database was running, I deployed the Bugzilla container:
+\begin{verbatim}
+docker run -d \
+  --name bugzilla \
+  --network bugzilla-net \
+  -p 80:80 \
+  -e DB_HOST=mariadb-bugzilla \
+  -e DB_DATABASE=bugs \
+  -e DB_USER=bugzilla \
+  -e DB_PASSWORD=bugpass \
+  -e BUGZILLA_URL=http://159.89.43.12 \
+  nasqueron/bugzilla
+\end{verbatim}
+
+\subsection{Configuration Parameters}
+\begin{itemize}
+    \item \textbf{Port Mapping:} 80:80 (host:container)
+    \item \textbf{Network:} Custom bridge network (\texttt{bugzilla-net})
+    \item \textbf{Database Connection:} MariaDB via Docker network
+    \item \textbf{Environment Variables:} Database credentials and Bugzilla URL configured via \texttt{-e} flags
+\end{itemize}
+
+\subsection{Troubleshooting}
+During setup, I encountered an issue where the Bugzilla container kept exiting. The logs revealed missing environment variables (\texttt{DB\_PASSWORD} and \texttt{DB\_DATABASE}). This was resolved by ensuring all required environment variables were properly specified in the \texttt{docker run} command.
+
+\subsection{Access URL}
+The Bugzilla application is accessible at:
+
+\url{http://159.89.43.12}
+
+\subsection{Verification}
+To verify both containers were running correctly, I used:
+\begin{verbatim}
+docker ps
+\end{verbatim}
+
+Both \texttt{mariadb-bugzilla} and \texttt{bugzilla} containers showed status ``Up'' after successful deployment.
+
+\section{Overleaf Details}
+
+I deployed an Overleaf (ShareLaTeX) instance on a dedicated DigitalOcean Droplet using Docker Compose. Overleaf is a collaborative online LaTeX editor that allows real-time document editing and requires MongoDB and Redis as dependencies.
+
+\subsection{Docker Images Used}
+\begin{itemize}
+    \item \textbf{Overleaf:} \texttt{sharelatex/sharelatex:latest}
+    \item \textbf{Database:} \texttt{mongo:6.0}
+    \item \textbf{Cache:} \texttt{redis:6.2}
+\end{itemize}
+
+\subsection{Setup Process}
+
+\subsubsection{Step 1: Create Dedicated DigitalOcean Droplet}
+I created a new dedicated Droplet on DigitalOcean with the following specifications:
+\begin{itemize}
+    \item Operating System: Ubuntu 22.04 LTS
+    \item RAM: At least 2GB (recommended for Overleaf)
+    \item Plan: Basic (\$12/month)
+    \item SSH access enabled
+\end{itemize}
+
+\subsubsection{Step 2: Install Docker and Docker Compose}
+After connecting to the Droplet via SSH, I installed Docker and Docker Compose:
+\begin{verbatim}
+apt update && apt install -y docker.io docker-compose
+systemctl enable docker && systemctl start docker
+\end{verbatim}
+
+\subsubsection{Step 3: Create Docker Compose Configuration}
+I created a directory for Overleaf and set up a Docker Compose file:
+\begin{verbatim}
+mkdir ~/overleaf
+cd ~/overleaf
+nano docker-compose.yml
+\end{verbatim}
+
+\subsubsection{Step 4: Docker Compose Configuration}
+The \texttt{docker-compose.yml} file contains three services: MongoDB (with replica set), Redis, and Overleaf (ShareLaTeX):
+
+\begin{verbatim}
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: mongo
+    command: ["--replSet", "overleaf"]
+    restart: always
+    volumes:
+      - /root/mongo_data:/data/db
+    expose:
+      - 27017
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", 
+             "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - overleaf-net
+      
+  redis:
+    image: redis:6.2
+    container_name: redis
+    restart: always
+    volumes:
+      - /root/redis_data:/data
+    expose:
+      - 6379
+    networks:
+      - overleaf-net
+      
+  sharelatex:
+    image: sharelatex/sharelatex
+    container_name: sharelatex
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - /root/sharelatex_data:/var/lib/overleaf
+    environment:
+      OVERLEAF_APP_NAME: Overleaf Community Edition
+      OVERLEAF_MONGO_URL: mongodb://mongo:27017/sharelatex?replicaSet=overleaf
+      OVERLEAF_REDIS_HOST: redis
+      ENABLED_LINKED_FILE_TYPES: project_file,project_output_file
+      ENABLE_CONVERSIONS: 'true'
+      EMAIL_CONFIRMATION_DISABLED: 'true'
+      OVERLEAF_SITE_URL: http://<droplet_ip>
+      OVERLEAF_NAV_TITLE: Overleaf CE
+    networks:
+      - overleaf-net
+      
+networks:
+  overleaf-net:
+\end{verbatim}
+
+\subsubsection{Step 5: Initialize MongoDB Replica Set}
+After starting the containers, I initialized the MongoDB replica set manually:
+\begin{verbatim}
+docker exec -it mongo mongosh --eval "rs.initiate({
+  _id: 'overleaf',
+  members: [{ _id: 0, host: 'mongo:27017' }]
+})"
+\end{verbatim}
+
+\subsubsection{Step 6: Deploy Overleaf}
+I started all three containers using Docker Compose:
+\begin{verbatim}
+docker-compose up -d
+\end{verbatim}
+
+\subsubsection{Step 7: Configure Firewall}
+I ensured that port 80 was open in the firewall to allow external access:
+\begin{verbatim}
+ufw allow 80/tcp
+ufw allow OpenSSH
+ufw enable
+\end{verbatim}
+
+\subsection{Configuration Parameters}
+\begin{itemize}
+    \item \textbf{Port Mapping:} 80:80 (host:container)
+    \item \textbf{Container Names:} \texttt{sharelatex}, \texttt{mongo}, \texttt{redis}
+    \item \textbf{Persistent Storage:} Three bind mounts for Overleaf data (\texttt{/root/sharelatex\_data}), MongoDB data (\texttt{/root/mongo\_data}), and Redis data (\texttt{/root/redis\_data})
+    \item \textbf{Network:} Custom bridge network (\texttt{overleaf-net}) for inter-container communication
+    \item \textbf{Dependencies:} MongoDB 6.0 configured as a replica set for transaction support, and Redis 6.2 for session management
+    \item \textbf{MongoDB Replica Set:} Required by Overleaf version 5.0+ for database transaction support
+\end{itemize}
+
+\subsection{Troubleshooting}
+During setup, I encountered several critical issues that were resolved:
+
+\subsubsection{MongoDB Version Requirement}
+The initial deployment attempted to use MongoDB 5.0, but Overleaf required MongoDB 6.0. This was resolved by updating the Docker image to \texttt{mongo:6.0}.
+
+\subsubsection{MongoDB Replica Set Requirement}
+Overleaf version 5.0+ requires MongoDB to run in replica set mode to support database transactions. The error message ``Transaction numbers are only allowed on a replica set member or mongos'' indicated this requirement. This was resolved by:
+\begin{enumerate}
+    \item Configuring MongoDB with the \texttt{--replSet overleaf} command
+    \item Updating the connection string to include \texttt{?replicaSet=overleaf}
+    \item Manually initializing the replica set using \texttt{mongosh}
+\end{enumerate}
+
+\subsubsection{Environment Variable Rebranding}
+Overleaf 5.0+ deprecated \texttt{SHARELATEX\_} prefixed environment variables in favor of \texttt{OVERLEAF\_} prefixed variables. All environment variables were updated to use the new naming convention.
+
+\subsubsection{Volume Path Updates}
+The path \texttt{/var/lib/sharelatex} was deprecated in favor of \texttt{/var/lib/overleaf} for the main application data directory.
+
+\subsection{Initialization}
+The Overleaf container takes approximately 2--3 minutes to fully initialize on first startup. The \texttt{depends\_on} configuration with health checks ensures that MongoDB is ready before Overleaf attempts to connect. During this time, the internal services connect to MongoDB and Redis, and the web application becomes available.
+
+\subsection{Verification}
+To verify all containers were running correctly, I used:
+\begin{verbatim}
+docker-compose ps
+\end{verbatim}
+
+All three containers (\texttt{sharelatex}, \texttt{mongo}, and \texttt{redis}) showed status ``Up'' after successful deployment. MongoDB also showed ``healthy'' status after passing its health check.
+
+\subsection{Access URL}
+The Overleaf application is accessible at:
+
+\url{http://142.93.207.133}
+
+Note: Overleaf is deployed on a dedicated droplet on port 80, eliminating the need to specify a port number in the URL. This provides a cleaner access experience compared to port-based deployments.

@@ -1,0 +1,776 @@
+\chapter{Overleaf Deployment}
+\label{chap:overleafDeployment}
+\section{Introduction}
+
+This chapter documents the deployment and configuration of Overleaf Community Edition (CE) on DigitalOcean. The deployment includes custom domain integration, SSL certificate setup with Let's Encrypt, GitHub synchronization, and command-line compilation capabilities for LaTeX projects.
+
+\section{Domain Registration and DNS Configuration}
+
+\subsection{Domain Acquisition}
+
+A domain name was acquired through Name.com for the Overleaf deployment:
+
+\textbf{Domain:} \texttt{devops-group14.app}
+
+This domain was obtained with a one-year free registration through the GitHub Student Developer Pack.
+
+\subsection{DigitalOcean Droplet Creation}
+
+A DigitalOcean Droplet was created with the following specifications:
+
+\textbf{Droplet Details:}
+\begin{itemize}
+    \item \textbf{IPv4 Address:} \texttt{142.93.207.133}
+    \item \textbf{Operating System:} Ubuntu 22.04 LTS
+    \item \textbf{Region:} Configured based on proximity requirements
+\end{itemize}
+
+\subsection{DNS Configuration in DigitalOcean}
+
+After creating the Droplet, configure DNS records in the DigitalOcean control panel:
+
+\textbf{Step 1: Add Domain to DigitalOcean}
+\begin{enumerate}
+    \item Navigate to Networking → Domains in the DigitalOcean dashboard
+    \item Enter \texttt{devops-group14.app} and click ``Add Domain''
+    \item Select your Droplet from the list
+\end{enumerate}
+
+\textbf{Step 2: Configure DNS Records}
+
+The following DNS records are automatically created:
+\begin{itemize}
+    \item \textbf{A Record:}
+    \begin{itemize}
+        \item \textbf{Hostname:} @
+        \item \textbf{Will Direct To:} \texttt{142.93.207.133}
+        \item \textbf{TTL:} 3600
+    \end{itemize}
+\end{itemize}
+
+\textbf{Step 3: Update Name.com Nameservers}
+
+In Name.com DNS settings, update nameservers to point to DigitalOcean:
+\begin{itemize}
+    \item \texttt{ns1.digitalocean.com}
+    \item \texttt{ns2.digitalocean.com}
+    \item \texttt{ns3.digitalocean.com}
+\end{itemize}
+
+\subsection{DNS Propagation Verification}
+
+Verify DNS propagation using the following commands from your local machine:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Check A record
+dig devops-group14.app
+
+# Verify IP address resolution
+ping devops-group14.app
+
+# Check nameservers
+dig NS devops-group14.app
+\end{minted}
+
+Expected output should show the IP address \texttt{142.93.207.133}. DNS propagation typically takes 15 minutes to 48 hours.
+
+\section{SSL Certificate Configuration with Let's Encrypt}
+
+\subsection{SSL Certificate Overview}
+
+SSL certificates encrypt data transmitted between the client and server, ensuring secure communication. Let's Encrypt provides free SSL certificates that automatically renew every 90 days.
+
+\subsection{Prerequisites for SSL Setup}
+
+Ensure the following requirements are met on your DigitalOcean Droplet (IP: 142.93.207.133):
+
+\begin{enumerate}
+    \item Domain name properly configured and pointing to \texttt{142.93.207.133}
+    \item Ports 80 (HTTP) and 443 (HTTPS) are open in the firewall
+    \item SSH access to the Droplet
+\end{enumerate}
+
+\subsection{SSL Certificate Installation Process}
+
+\subsubsection{Install Certbot and Nginx}
+
+SSH into your DigitalOcean Droplet and install the required packages:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Update package list
+sudo apt update
+
+# Install Nginx
+sudo apt install nginx -y
+
+# Install Certbot and Nginx plugin
+sudo apt install certbot python3-certbot-nginx -y
+\end{minted}
+
+\subsubsection{Configure Nginx as Reverse Proxy}
+
+Create an Nginx configuration file for Overleaf:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+sudo nano /etc/nginx/sites-available/overleaf
+\end{minted}
+
+Add the following configuration:
+
+\begin{minted}[breaklines,fontsize=\small]{nginx}
+server {
+    listen 80;
+    server_name devops-group14.app;
+
+    location / {
+        proxy_pass http://localhost:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeout settings
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+}
+\end{minted}
+
+Enable the configuration:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Create symbolic link
+sudo ln -s /etc/nginx/sites-available/overleaf /etc/nginx/sites-enabled/
+
+# Remove default configuration
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Restart Nginx
+sudo systemctl restart nginx
+\end{minted}
+
+\subsubsection{Obtain SSL Certificate}
+
+Request an SSL certificate from Let's Encrypt:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+sudo certbot --nginx -d devops-group14.app
+\end{minted}
+
+During the certificate request:
+\begin{enumerate}
+    \item Enter an email address for urgent renewal notices
+    \item Agree to the Terms of Service
+    \item Choose whether to redirect HTTP to HTTPS (Select option 2: Redirect)
+\end{enumerate}
+
+Certbot automatically modifies the Nginx configuration to include SSL settings.
+
+\subsubsection{Verify SSL Configuration}
+
+After installation, the Nginx configuration is automatically updated to:
+
+\begin{minted}[breaklines,fontsize=\small]{nginx}
+server {
+    listen 443 ssl;
+    server_name devops-group14.app;
+
+    ssl_certificate /etc/letsencrypt/live/devops-group14.app/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/devops-group14.app/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://localhost:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeout settings
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+}
+
+server {
+    listen 80;
+    server_name devops-group14.app;
+    return 301 https://$server_name$request_uri;
+}
+\end{minted}
+
+\subsection{SSL Certificate Automatic Renewal}
+
+\subsubsection{Test Renewal Process}
+
+Verify that automatic renewal is configured correctly:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+sudo certbot renew --dry-run
+\end{minted}
+
+Let's Encrypt certificates are valid for 90 days. Certbot automatically creates a systemd timer that checks and renews certificates when they are within 30 days of expiration.
+
+\subsection{Update Docker Compose for SSL}
+
+Since Nginx now handles SSL termination, the docker-compose.yml uses standard HTTP internally. The Overleaf container listens on port 80, and Nginx proxies HTTPS traffic to it.
+
+\section{Overleaf Instance Deployment}
+
+\subsection{Repository Setup}
+
+\subsubsection{Fork and Clone Repository}
+
+SSH into your DigitalOcean Droplet and clone the forked Overleaf repository:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+git clone https://github.com/Badri-Narayanan/overleaf-group14.git
+cd overleaf-group14
+\end{minted}
+
+\subsubsection{Navigate to Configuration Directory}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+cd overleaf
+\end{minted}
+
+\subsection{Docker Compose Configuration}
+
+\subsubsection{Create docker-compose.yml}
+
+Create the \texttt{docker-compose.yml} file with the following configuration:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+nano docker-compose.yml
+\end{minted}
+
+Add the following content:
+
+\begin{minted}[breaklines,fontsize=\small]{yaml}
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: mongo
+    command: ["--replSet", "overleaf"]
+    restart: always
+    volumes:
+      - /root/mongo_data:/data/db
+    expose:
+      - 27017
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - overleaf-net
+  redis:
+    image: redis:6.2
+    container_name: redis
+    restart: always
+    volumes:
+      - /root/redis_data:/data
+    expose:
+      - 6379
+    networks:
+      - overleaf-net
+  sharelatex:
+    image: sharelatex/sharelatex
+    container_name: sharelatex
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - /root/sharelatex_data:/var/lib/overleaf
+    environment:
+      OVERLEAF_APP_NAME: Overleaf Community Edition
+      OVERLEAF_MONGO_URL: mongodb://mongo:27017/sharelatex?replicaSet=overleaf
+      OVERLEAF_REDIS_HOST: redis
+      ENABLED_LINKED_FILE_TYPES: project_file,project_output_file
+      ENABLE_CONVERSIONS: 'true'
+      EMAIL_CONFIRMATION_DISABLED: 'true'
+      OVERLEAF_SITE_URL: http://devops-group14.app
+      OVERLEAF_NAV_TITLE: Overleaf CE
+    networks:
+      - overleaf-net
+networks:
+  overleaf-net:
+\end{minted}
+
+\textbf{Key Configuration Points:}
+\begin{itemize}
+    \item MongoDB runs with replica set support
+    \item Data volumes are stored in \texttt{/root/} directory
+    \item Containers communicate through a dedicated network
+    \item Overleaf is accessible on port 80
+\end{itemize}
+
+\subsection{Build and Deploy Containers}
+
+\subsubsection{Initialize MongoDB Replica Set}
+
+Before starting the containers, ensure MongoDB replica set is properly initialized:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Start containers
+docker compose up -d
+
+# Wait for MongoDB to be healthy (check with docker ps)
+# Then initialize the replica set
+docker exec mongo mongosh --eval "rs.initiate({_id: 'overleaf', members: [{_id: 0, host: 'mongo:27017'}]})"
+\end{minted}
+
+\subsubsection{Build Docker Images}
+
+Execute the following command from the repository root:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker compose up -d --build
+\end{minted}
+
+This command:
+\begin{itemize}
+    \item Builds Docker images for ShareLaTeX, MongoDB, and Redis
+    \item Creates and starts containers in detached mode
+    \item Establishes networking between containers
+\end{itemize}
+
+\subsubsection{Verify Container Status}
+
+Check that all containers are running:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker ps
+\end{minted}
+
+Expected output shows three running containers:
+\begin{itemize}
+    \item \texttt{sharelatex}
+    \item \texttt{mongo}
+    \item \texttt{redis}
+\end{itemize}
+
+\subsection{LaTeX Package Installation}
+
+\subsubsection{Install Essential LaTeX Packages}
+
+Install comprehensive LaTeX packages inside the ShareLaTeX container:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec -it sharelatex bash -lc "apt-get update && apt-get install -y --no-install-recommends latexmk texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-science texlive-bibtex-extra texlive-publishers && apt-get clean"
+\end{minted}
+
+This installation includes:
+\begin{itemize}
+    \item \texttt{latexmk}: Build automation tool
+    \item \texttt{texlive-latex-recommended}: Core LaTeX packages
+    \item \texttt{texlive-latex-extra}: Extended LaTeX packages
+    \item \texttt{texlive-fonts-recommended}: Standard font packages
+    \item \texttt{texlive-science}: Scientific and mathematical packages
+    \item \texttt{texlive-bibtex-extra}: Bibliography management
+    \item \texttt{texlive-publishers}: Journal and publisher templates
+\end{itemize}
+
+\subsection{Administrator Account Creation}
+
+\subsubsection{Create Admin Account}
+
+Create an administrator account for Overleaf:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec sharelatex /bin/bash -c "cd /var/www/sharelatex; grunt user:create-admin --email=group14@stevens.com"
+\end{minted}
+
+\subsubsection{Set Administrator Password}
+
+The command outputs a password reset link. Example:
+
+\begin{minted}[breaklines,fontsize=\small]{text}
+Generated password reset token for group14@stevens.com:
+http://localhost/user/password/set?passwordResetToken=abc123def456...
+\end{minted}
+
+Access the link by replacing \texttt{localhost} with your domain:
+
+\begin{minted}[breaklines,fontsize=\small]{text}
+http://devops-group14.app/user/password/set?passwordResetToken=abc123def456...
+\end{minted}
+
+Set the administrator password as: \texttt{somePassword123\#}
+
+\textbf{Administrator Credentials:}
+\begin{itemize}
+    \item \textbf{Email:} \texttt{group14@stevens.com}
+    \item \textbf{Password:} \texttt{somePassword123\#}
+\end{itemize}
+
+\subsection{Access Overleaf Instance}
+
+Navigate to \url{https://devops-group14.app} in a web browser and log in using the administrator credentials created above.
+
+\section{GitHub Repository Integration with DigitalOcean App Platform}
+
+\subsection{DigitalOcean App Platform Overview}
+
+DigitalOcean App Platform enables automated deployment directly from GitHub repositories. When integrated, any push to the main branch automatically triggers a new deployment, ensuring the application stays synchronized with the latest code changes.
+
+\subsection{Create DigitalOcean App from GitHub Repository}
+
+\subsubsection{Connect GitHub Repository}
+
+\begin{enumerate}
+    \item Navigate to the DigitalOcean dashboard
+    \item Click on ``Apps'' in the left sidebar
+    \item Click ``Create App''
+    \item Select ``GitHub'' as the source
+    \item Authorize DigitalOcean to access your GitHub account
+    \item Select the repository: \texttt{Badri-Narayanan/overleaf-group14}
+    \item Choose the branch: \texttt{main}
+\end{enumerate}
+
+\subsubsection{Configure Auto-Deploy Settings}
+
+Enable automatic deployment on code changes:
+
+\begin{enumerate}
+    \item In the app configuration, locate ``Source'' settings
+    \item Check the option \textbf{``Autodeploy: code changes''}
+    \item This ensures that any push to the \texttt{main} branch triggers automatic redeployment
+\end{enumerate}
+
+\textbf{Configuration Details:}
+\begin{itemize}
+    \item \textbf{Repository:} \url{https://github.com/Badri-Narayanan/overleaf-group14}
+    \item \textbf{Branch:} main
+    \item \textbf{Autodeploy:} Enabled
+    \item \textbf{Deploy on Push:} Yes
+\end{itemize}
+
+\subsubsection{Configure App Resources}
+
+Set up the application resources:
+
+\begin{enumerate}
+    \item \textbf{Resource Type:} Docker Compose
+    \item \textbf{Source Directory:} \texttt{/overleaf} (where docker-compose.yml is located)
+    \item \textbf{Environment Variables:} Already defined in docker-compose.yml
+    \item \textbf{HTTP Port:} 80
+\end{enumerate}
+
+\subsubsection{Deploy the App}
+
+\begin{enumerate}
+    \item Review the app configuration
+    \item Click ``Create Resources''
+    \item Wait for the initial deployment to complete
+    \item DigitalOcean will build and deploy the containers
+\end{enumerate}
+
+\subsection{Verify Automatic Deployment}
+
+\subsubsection{Test Auto-Deploy Functionality}
+
+To verify automatic deployment works:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Clone the repository locally
+git clone https://github.com/Badri-Narayanan/overleaf-group14.git
+cd overleaf-group14
+
+# Make a test change
+echo "# Test deployment" >> README.md
+
+# Commit and push to main branch
+git add README.md
+git commit -m "Test automatic deployment"
+git push origin main
+\end{minted}
+
+\subsubsection{Monitor Deployment}
+
+\begin{enumerate}
+    \item Navigate to the DigitalOcean App Platform dashboard
+    \item Select your app
+    \item View the ``Activity'' tab to see the automatic deployment triggered
+    \item Wait for deployment to complete (typically 5-10 minutes)
+\end{enumerate}
+
+\section{Command-Line Compilation}
+
+\subsection{Compilation Overview}
+
+Command-line compilation enables automated builds and integration with CI/CD pipelines. All compilation commands are executed via SSH on the DigitalOcean Droplet (142.93.207.133).
+
+\subsection{Access DigitalOcean Droplet}
+
+Connect to the Droplet via SSH:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+ssh root@142.93.207.133
+\end{minted}
+
+\subsection{Direct Container Compilation}
+
+\subsubsection{Access the ShareLaTeX Container}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec -it sharelatex bash
+\end{minted}
+
+\subsubsection{Navigate to Project Directory}
+
+Projects are stored in the compiles directory:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+cd /var/lib/overleaf/data/compiles
+ls -la
+\end{minted}
+
+Navigate to your specific project:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+cd /var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc
+ls -la
+\end{minted}
+
+\subsubsection{Locate Main LaTeX File}
+
+Identify the main \texttt{.tex} file (commonly \texttt{main.tex}):
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+ls -la *.tex
+\end{minted}
+
+\subsubsection{Compile Using latexmk}
+
+Use latexmk for automated compilation with dependency resolution:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+latexmk -pdf -interaction=nonstopmode main.tex
+\end{minted}
+
+\textbf{Command Options:}
+\begin{itemize}
+    \item \texttt{-pdf}: Generate PDF output
+    \item \texttt{-interaction=nonstopmode}: Continue compilation without stopping for errors
+\end{itemize}
+
+\subsubsection{Alternative Compilation Methods}
+
+\textbf{Using pdfLaTeX:}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+pdflatex -interaction=nonstopmode main.tex
+\end{minted}
+
+\subsection{Extract Compiled PDF}
+
+\subsubsection{Copy PDF from Container to Droplet}
+
+Exit the container and execute from the Droplet:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker cp sharelatex:/var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc/main.pdf ./output.pdf
+\end{minted}
+
+\subsubsection{Download PDF to Local Machine}
+
+From your local machine, download the PDF using SCP:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+scp root@142.93.207.133:~/output.pdf ./local-output.pdf
+\end{minted}
+
+\subsection{Compilation from GitHub Repository}
+
+\subsubsection{Clone Repository on Droplet}
+
+SSH into the Droplet and clone the GitHub repository:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+cd ~
+git clone https://github.com/Badri-Narayanan/overleaf-group14.git
+cd overleaf-group14
+\end{minted}
+
+\subsubsection{Copy Files to Overleaf Container}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker cp ./ sharelatex:/var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc/
+\end{minted}
+
+\subsubsection{Compile Inside Container}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec sharelatex bash -c "cd /var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc && latexmk -pdf -interaction=nonstopmode main.tex"
+\end{minted}
+
+\subsubsection{Extract Compiled Output}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker cp sharelatex:/var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc/main.pdf ./compiled-output.pdf
+\end{minted}
+
+\subsection{Troubleshooting Compilation Issues}
+
+\subsubsection{View Compilation Logs}
+
+If compilation fails, check the log file:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec sharelatex bash -c "cd /var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc && cat main.log"
+\end{minted}
+
+\subsubsection{Check LaTeX Package Installation}
+
+Verify required packages are installed:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec sharelatex bash -c "latex --version"
+docker exec sharelatex bash -c "pdflatex --version"
+\end{minted}
+
+\subsubsection{Install Missing Packages}
+
+If specific packages are missing:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+docker exec -it sharelatex bash
+apt-get update
+apt-get install -y texlive-PACKAGE-NAME
+\end{minted}
+
+\section{Version Control Integration with Document Title}
+
+\subsection{Purpose and Implementation}
+
+To establish traceability between compiled documents and their source code versions in GitHub, the document title should include the Git commit hash. This creates an audit trail that maps each generated PDF to its exact source code state.
+
+\subsection{Automated Version Insertion Strategy}
+
+\subsubsection{Modify LaTeX Document for Dynamic Versioning}
+
+Update the main LaTeX file to include a version placeholder:
+
+\begin{minted}[breaklines,fontsize=\small]{latex}
+\documentclass{article}
+\usepackage{fancyhdr}
+
+% Define version command
+\newcommand{\documentversion}{VERSION_PLACEHOLDER}
+
+\title{Project Report - Version \documentversion}
+\author{Group 14}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% Document content here
+
+\end{document}
+\end{minted}
+
+\subsubsection{Create Version Injection Script}
+
+Create a script on the DigitalOcean Droplet to automatically inject the Git commit hash:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+#!/bin/bash
+# inject-version.sh
+
+REPO_PATH="$1"
+TEX_FILE="$2"
+
+if [ -z "$REPO_PATH" ] || [ -z "$TEX_FILE" ]; then
+    echo "Usage: ./inject-version.sh REPO_PATH TEX_FILE"
+    exit 1
+fi
+
+cd "$REPO_PATH"
+
+# Get the latest commit hash
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_DATE=$(git log -1 --format=%cd --date=short)
+
+echo "Injecting version: $COMMIT_HASH (Date: $COMMIT_DATE)"
+
+# Replace version placeholder with actual commit hash
+sed -i "s/VERSION_PLACEHOLDER/$COMMIT_HASH/g" "$TEX_FILE"
+
+echo "Version injection completed."
+\end{minted}
+
+Make the script executable:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+chmod +x inject-version.sh
+\end{minted}
+
+\subsubsection{Usage Example}
+
+SSH into the DigitalOcean Droplet (142.93.207.133) and execute:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Clone the repository
+git clone https://github.com/Badri-Narayanan/overleaf-group14.git
+cd overleaf-group14
+
+# Inject version into LaTeX document
+./inject-version.sh . main.tex
+
+# Copy to Overleaf container
+docker cp ./ sharelatex:/var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc/
+
+# Compile the document
+docker exec sharelatex bash -c "cd /var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc && latexmk -pdf -interaction=nonstopmode main.tex"
+
+# Extract the compiled PDF
+docker cp sharelatex:/var/lib/overleaf/data/compiles/68f14824c7c1f423d5bbe7bc/main.pdf ./output-versioned.pdf
+\end{minted}
+
+\subsection{Manual Version Addition}
+
+If the LaTeX document doesn't contain a VERSION\_PLACEHOLDER, manually add the version to the title:
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+# Get the current commit hash
+COMMIT_HASH=$(git rev-parse --short HEAD)
+
+# Modify the title in the LaTeX file
+sed -i "s/\\title{\([^}]*\)}/\\title{\1 - Version $COMMIT_HASH}/g" main.tex
+\end{minted}
+
+\subsection{Verification}
+
+After compilation, verify that the PDF contains the version information:
+
+\begin{enumerate}
+    \item Open the generated PDF
+    \item Check the title page for the commit hash
+    \item Verify the commit hash matches the latest Git commit:
+\end{enumerate}
+
+\begin{minted}[breaklines,fontsize=\small]{bash}
+git rev-parse --short HEAD
+\end{minted}

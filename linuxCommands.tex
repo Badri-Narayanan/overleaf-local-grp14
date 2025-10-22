@@ -1,0 +1,378 @@
+% Chapter 1 - Assignment 1
+\chapter{Linux Commands}
+\label{chap:linux}
+
+This chapter is about understanding and executing Linux commands\index{Linux commands} and some exercises.
+
+\section{Navigation \& File Ops}
+
+\begin{enumerate}
+\item Show your present working directory path only.
+\begin{itemize}
+\item Input: \texttt{pwd}\index{pwd command}
+\item Output: \texttt{/Users/badrinarayanan/lx-test}
+\end{itemize}
+
+\item List all entries in the current directory, one per line, including dotfiles.
+\begin{itemize}
+\item Input: \texttt{ls -A1}\index{ls command}
+\item Output:
+\begin{verbatim}
+archive
+blob.bin
+cs.txt
+link-to-file1
+old.txt
+people.csv
+src
+sys.log
+tmp
+words.txt
+\end{verbatim}
+\end{itemize}
+
+\item Copy \texttt{src/file1.txt} to \texttt{tmp/} only if tmp exists; do it verbosely.
+\begin{itemize}
+\item Input: \texttt{[ -d tmp ] \&\& cp -v src/file1.txt tmp/}
+\item Output: \texttt{src/file1.txt -> tmp/file1.txt}
+\end{itemize}
+
+\item Move \texttt{old.txt} into \texttt{archive/} and keep its original timestamp.
+\begin{itemize}
+\item Input: \texttt{mv -v old.txt archive/}
+\item Output: \texttt{old.txt -> archive/old.txt}
+\end{itemize}
+
+\item Create a new empty file \texttt{notes.md} only if it doesn't already exist.
+\begin{itemize}
+\item Input: \texttt{[ ! -e notes.md ] \&\& touch notes.md}
+\item Output: \texttt{notes.md} file created in lx-test folder.
+\end{itemize}
+
+\item Show disk usage (human-readable) for the src directory only (not total FS).
+\begin{itemize}
+\item Input: \texttt{du -sh src}
+\item Output: \texttt{8.0K src}
+\end{itemize}
+\end{enumerate}
+
+\section{Viewing \& Searching}
+
+\begin{enumerate}
+\item Print line numbers while displaying \texttt{sys.log}.
+\begin{itemize}
+\item Input: \texttt{nl sys.log}
+\item Output:
+\begin{verbatim}
+1 INFO boot ok
+2 WARN disk low
+3 ERROR fan fail
+4 INFO shutdown
+\end{verbatim}
+\end{itemize}
+
+\item Show only the lines in \texttt{sys.log} that contain ERROR (case-sensitive).
+\begin{itemize}
+\item Input: \texttt{grep 'ERROR' sys.log}\index{grep command}
+\item Output: \texttt{ERROR fan fail}
+\end{itemize}
+
+\item Count how many distinct words appear in \texttt{words.txt} (case-insensitive).
+\begin{itemize}
+\item Input: \texttt{tr '[:upper:]' '[:lower:]' < words.txt | uniq | wc -w}
+\item Output: \texttt{4}
+\end{itemize}
+
+\item From \texttt{words.txt}, show lines that start with g or G.
+\begin{itemize}
+\item Input: \texttt{grep -E '\^{}(g|G)' words.txt}
+\item Output:
+\begin{verbatim}
+Gamma
+gamma
+\end{verbatim}
+\end{itemize}
+
+\item Display the first 2 lines of \texttt{people.csv} without using an editor.
+\begin{itemize}
+\item Input: \texttt{head -n 2 people.csv}
+\item Output:
+\begin{verbatim}
+id,name,dept
+1,Ada,EE
+\end{verbatim}
+\end{itemize}
+
+\item Show the last 3 lines of \texttt{sys.log} and keep following if the file grows.
+\begin{itemize}
+\item Input: \texttt{tail -n 3 -f sys.log}
+\item Output:
+\begin{verbatim}
+WARN disk low
+ERROR fan fail
+INFO shutdown
+\end{verbatim}
+\end{itemize}
+\end{enumerate}
+
+\section{Text Processing}
+
+\begin{enumerate}
+\item From \texttt{people.csv}, print only the name column (2nd), excluding the header.
+\begin{itemize}
+\item Input: \texttt{awk -F',' 'NR>1 \{print \$2\}' people.csv}\index{awk command}
+\item Output:
+\begin{verbatim}
+Ada
+Linus
+Grace
+Dennis
+\end{verbatim}
+\end{itemize}
+
+\item Sort \texttt{words.txt} case-insensitively and remove duplicates.
+\begin{itemize}
+\item Input: \texttt{sort -f words.txt | uniq}
+\item Output:
+\begin{verbatim}
+alpha
+beta
+gamma
+Gamma
+\end{verbatim}
+\end{itemize}
+
+\item Replace every three with 3 in all files under \texttt{src/} in-place, creating .bak backups.
+\begin{itemize}
+\item Input: \texttt{find src -type f -exec sed -i.bak 's/three/3/g' \{\} +}
+\item Output: one two 3 four in file1.txt\\
+two 3 four five in file2.txt\\
+file1.txt.bak and file2.txt.bak created with original data.
+\end{itemize}
+
+\item Print the number of lines, words, and bytes for every *.txt file in \texttt{src/}.
+\begin{itemize}
+\item Input: \texttt{wc src/*.txt}
+\item Output:
+\begin{verbatim}
+1 4 15 src/file1.txt
+1 4 16 src/file2.txt
+2 8 31 total
+\end{verbatim}
+\end{itemize}
+\end{enumerate}
+
+\section{Permissions \& Ownership}
+
+\begin{enumerate}
+\item Make \texttt{tmp/} readable, writable, and searchable only by the owner.
+\begin{itemize}
+\item Input: \texttt{chmod 700 tmp}\index{chmod command}
+\item Output: directory permission changed.
+\end{itemize}
+
+\item Give group execute permission to \texttt{src/lib} recursively without touching others/owner bits.
+\begin{itemize}
+\item Input: \texttt{find src/lib -type d -exec chmod g+x \{\} +}
+\item Output: folder permissions changed.
+\end{itemize}
+
+\item Show the numeric (octal) permissions of \texttt{src/file2.txt}.
+\begin{itemize}
+\item Input: \texttt{stat -f '\%Lp' src/file2.txt}
+\item Output: \texttt{644}
+\end{itemize}
+
+\item Make \texttt{notes.md} append-only for the owner via file attributes (if supported).
+\begin{itemize}
+\item Input: \texttt{sudo chflags uchg notes.md}
+\item Output: file permissions changed
+\end{itemize}
+\end{enumerate}
+
+\section{Links \& Find}
+
+\begin{enumerate}
+\item Verify whether \texttt{link-to-file1} is a symlink and show its target path.
+\begin{itemize}
+\item Input: \texttt{readlink -f link-to-file1}
+\item Output: \texttt{/Users/badrinarayanan/lx-test/src/file1.txt}
+\end{itemize}
+
+\item Find all regular files under the current tree larger than 40 KiB.
+\begin{itemize}
+\item Input: \texttt{find . -type f -size +40k}\index{find command}
+\item Output: \texttt{./blob.bin}
+\end{itemize}
+
+\item Find files modified in the last 10 minutes under \texttt{tmp/} and print their sizes.
+\begin{itemize}
+\item Input: \texttt{find tmp -type f -mmin -10 -exec ls -lh \{\} + | awk '\{print \$5, \$9\}'}
+\item Output: \texttt{24B tmp/file1.txt}
+\end{itemize}
+\end{enumerate}
+
+\section{Processes \& Job Control}
+
+\begin{enumerate}
+\item Show your processes in a tree view.
+\begin{itemize}
+\item Input: \texttt{ps -ejh}\index{ps command}
+\item Output: printed all the processes in a tree manner.
+\end{itemize}
+
+\item Start \texttt{sleep 120} in the background and show its PID.
+\begin{itemize}
+\item Input: \texttt{sleep 120 \& echo \$!}
+\item Output:
+\begin{verbatim}
+12425
+12425
+\end{verbatim}
+\end{itemize}
+
+\item Send a TERM signal to all sleep processes owned by you (don't use kill -9).
+\begin{itemize}
+\item Input: \texttt{pkill -u \$(whoami) -x sleep}
+\item Output: \texttt{[1] + terminated sleep 120}
+\end{itemize}
+
+\item Show the top 5 processes by memory usage (one-shot, not interactive).
+\begin{itemize}
+\item Input: \texttt{ps aux | sort -nrk 4 | head -n 6}
+\item Output: top 5 processes shown.
+\end{itemize}
+\end{enumerate}
+
+\section{Archiving \& Compression}
+
+\begin{enumerate}
+\item Create a gzipped tar archive \texttt{src.tgz} from \texttt{src/} with relative paths.
+\begin{itemize}
+\item Input: \texttt{tar czf src.tgz -C src .}\index{tar command}
+\item Output: tar file created.
+\end{itemize}
+
+\item List the contents of \texttt{src.tgz} without extracting.
+\begin{itemize}
+\item Input: \texttt{tar tzf src.tgz}
+\item Output:
+\begin{verbatim}
+./
+./file2.txt
+./file1.txt
+./file2.txt.bak
+./lib/
+./file1.txt.bak
+\end{verbatim}
+\end{itemize}
+
+\item Extract only \texttt{file2.txt} from \texttt{src.tgz} into \texttt{tmp/}.
+\begin{itemize}
+\item Input: \texttt{tar xzf src.tgz -C tmp file2.txt}
+\item Output: Extracted only file2.txt into tmp.
+\end{itemize}
+\end{enumerate}
+
+\section{Networking \& System Info}
+
+\begin{enumerate}
+\item Show all listening TCP sockets with associated PIDs (no root assumptions).
+\begin{itemize}
+\item Input: \texttt{netstat -anp tcp | grep LISTEN}\index{netstat command}
+\item Output:
+\begin{verbatim}
+tcp6 0 0 *.51050 *.* LISTEN
+tcp4 0 0 *.51050 *.* LISTEN
+tcp6 0 0 *.5000 *.* LISTEN
+tcp4 0 0 *.5000 *.* LISTEN
+tcp6 0 0 *.7000 *.* LISTEN
+tcp4 0 0 *.7000 *.* LISTEN
+\end{verbatim}
+\end{itemize}
+
+\item Print your default route (gateway) in a concise form.
+\begin{itemize}
+\item Input: \texttt{netstat -rn | grep '\^{}default' | awk '\{print \$2\}'}
+\item Output:
+\begin{verbatim}
+10.0.0.1
+fe80::12e1:77ff:fe1c:3e48fe80::fe80::fe80::fe80::
+\end{verbatim}
+\end{itemize}
+
+\item Display kernel name, release, and machine architecture.
+\begin{itemize}
+\item Input: \texttt{uname -srm}
+\item Output: \texttt{Darwin 24.6.0 arm64}
+\end{itemize}
+
+\item Show the last 5 successful logins (or last sessions) on the system.
+\begin{itemize}
+\item Input: \texttt{last -f head -n 5}
+\item Output:
+\begin{verbatim}
+badrinarayanan ttys000 Tue Sep 16 20:56 still logged in
+badrinarayanan console Tue Sep 16 11:55 still logged in
+\end{verbatim}
+\end{itemize}
+\end{enumerate}
+
+\section{Package \& Services (Debian/Ubuntu)}
+
+\begin{enumerate}
+\item Show the installed version of package coreutils.
+\begin{itemize}
+\item Input: \texttt{brew list --versions coreutils}
+\item Output: lists the versions of coreutils installed.
+\end{itemize}
+
+\item Search available packages whose names contain ripgrep.
+\begin{itemize}
+\item Input: \texttt{brew search ripgrep}
+\item Output:
+\begin{verbatim}
+==> Formulae
+ripgrep
+ripgrep-all
+==> Casks
+ripme
+\end{verbatim}
+\end{itemize}
+
+\item Check whether service cron is active and print its status line only.
+\begin{itemize}
+\item Input: \texttt{ps aux | grep [c]ron}
+\item Output: \texttt{no matches found: [c]ron}
+\end{itemize}
+\end{enumerate}
+
+\section{Bash \& Scripting}
+
+\begin{enumerate}
+\item Write a one-liner that loops over *.txt in \texttt{src/} and prints: \texttt{<filename>:<number of lines>:<number of words>}.
+\begin{itemize}
+\item Input: \texttt{for f in src/*.txt; do echo "\$f:\$(wc -l < "\$f"):\$(wc -w < "\$f")"; done}
+\item Output:
+\begin{verbatim}
+src/file1.txt: 1: 4
+src/file2.txt: 1: 4
+\end{verbatim}
+\end{itemize}
+
+\item Write a command that exports CSV rows where dept == "CS" to \texttt{cs.txt} (exclude header).
+\begin{itemize}
+\item Input: \texttt{awk -F',' 'NR>1 \&\& \$3=="CS"' people.csv > cs.txt}
+\item Output:
+\begin{verbatim}
+2,Linus,CS
+4,Dennis,CS
+\end{verbatim}
+\end{itemize}
+
+\item Create a variable X with value 42, print it, then remove it from the environment.
+\begin{itemize}
+\item Input: \texttt{export X=42; echo \$X; unset X}
+\item Output: \texttt{42}
+\end{itemize}
+\end{enumerate}

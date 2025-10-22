@@ -1,0 +1,148 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{titling}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{minted}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{makeidx}
+
+% Hyperref for clickable links - MUST be loaded before glossaries
+\usepackage[pdfmark, 
+breaklinks=true, 
+colorlinks=true,
+citecolor=blue,
+linkcolor=blue,
+menucolor=black,
+pagecolor=black,
+urlcolor=blue
+]{hyperref}
+
+% Setup for glossaries
+\usepackage[toc,
+    chapter,
+    numberedchapter = autolabel
+    ]{glossaries}
+
+% Load glossary definitions
+\input{itGlossary.tex}
+\makenoidxglossaries
+
+% Make index
+\makeindex
+
+% Header/Footer setup
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\fancyhead[C]{Chapter \thechapter \hspace{1em} \copyright Stevens -- \today \hspace{1em} -- Do Not Distribute!}
+\renewcommand{\headrulewidth}{0pt}
+
+\title{DevOps - Group 14 Assignments}
+\date{October 2, 2025}
+\author{
+    Badri Narayanan Rajendran \\
+    Andre Santiago-Neyra 
+}
+
+\begin{document}
+
+%===========================================
+% FRONT MATTER (Roman numerals)
+%===========================================
+\pagenumbering{roman}
+
+% Cover Page
+\begin{titlepage}
+    \centering
+    \vspace*{5cm}
+    
+    {\Huge\bfseries DevOps - Group 14 Assignments\par}
+    
+    \vspace{1cm}
+    
+    {\Large by\par}
+    
+    \vspace{0.5cm}
+    
+    {\Large
+    Andre Santiago-Neyra\\
+    Badri Narayanan Rajendran\\
+    }
+    
+    \vspace{1cm}
+    
+    {\large Stevens.edu\par}
+    
+    \vfill
+    
+    {\large October 2, 2025\par}
+    
+\end{titlepage}
+
+% Copyright Page
+\newpage
+\thispagestyle{empty}
+\vspace*{\fill}
+\begin{center}
+    \copyright\ Badri Narayanan Rajendran, Andre Santiago-Neyra\\
+    Stevens.edu\\
+    ALL RIGHTS RESERVED
+\end{center}
+\vspace*{\fill}
+
+% Revision History
+\clearpage
+\input{history}
+\addcontentsline{toc}{chapter}{Revision History}
+
+% Passwords and Service Hints
+\clearpage
+\input{itPasswords}
+
+% Table of Contents
+\tableofcontents
+
+% List of Tables
+\listoftables
+
+% List of Figures
+\listoffigures
+
+%===========================================
+% MAIN CONTENT (Arabic numerals)
+%===========================================
+\clearpage
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+% Include chapter files
+\include{linuxCommands}
+\include{projectProposal}
+\include{awsDeployment}
+\include{digitalOceanSetup}
+\include{overleafDeployment}
+
+%===========================================
+% BACK MATTER
+%===========================================
+
+% Glossary
+\clearpage
+\printnoidxglossaries
+
+% Bibliography
+\clearpage
+\bibliographystyle{IEEEtran}
+\bibliography{bibfile}
+
+% Index
+\clearpage
+\printindex
+
+\end{document}
