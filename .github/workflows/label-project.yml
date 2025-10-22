@@ -30,32 +30,33 @@ jobs:
       - name: Get Git commit hash
         run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Update version in main.tex
+      - name: Update version in groupAssignments.tex
         run: |
-          sed -i "s/\\\\newcommand{\\\\gitversion}{Unknown}/\\\\newcommand{\\\\gitversion}{${GIT_HASH}}/" main.tex
+          sed -i "s/\\\\newcommand{\\\\gitversion}{Unknown}/\\\\newcommand{\\\\gitversion}{${GIT_HASH}}/" groupAssignments.tex
+	  echo "Updated veersion to: ${GIT_HASH}"
 
       - name: Compile LaTeX document
         run: |
-          pdflatex -interaction=nonstopmode main.tex
-          bibtex main || true
-          pdflatex -interaction=nonstopmode main.tex
-          pdflatex -interaction=nonstopmode main.tex
+          pdflatex -interaction=nonstopmode groupAssignments.tex
+          bibtex groupAssignments || true
+          pdflatex -interaction=nonstopmode groupAssignments.tex
+          pdflatex -interaction=nonstopmode groupAssignments.tex
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
         with:
           name: Compiled-PDF
-          path: main.pdf
+          path: groupAssignments.pdf
 
-      - name: Commit PDF to repo (using GITHUB_TOKEN)
+      - name: Commit PDF to repo
         if: success()
         env:
           GIT_HASH: ${{ env.GIT_HASH }}
         run: |
-          git config user.name "swe-developer"
-          git config user.email "anna.developer2354@gmail.com"
+          git config user.name "Badri-Narayanan"
+          git config user.email "badhrirajen@gmail.com"
           mkdir -p builds
-          mv -f main.pdf builds/document_${GIT_HASH}.pdf
+          mv -f groupAssignments.pdf builds/document_${GIT_HASH}.pdf
           git add builds/document_${GIT_HASH}.pdf
           git commit -m "Auto-build PDF for commit ${GIT_HASH}" || echo "No changes to commit"
           git push origin HEAD:main || echo "Push failed"
